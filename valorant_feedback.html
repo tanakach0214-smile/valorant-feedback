@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VALORANT フィードバックシート</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root {
+  --red:#ff4655; --red-dark:#c0392b;
+  --bg:#0f1013; --bg2:#16181f; --bg3:#1e2028; --bg4:#262830;
+  --border:#2e3040; --text:#dde0ee; --sub:#7b7f9e;
+  --win:#4ade80; --loss:#ff4655; --atk:#f59e0b; --def:#60a5fa;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;min-height:100vh;}
+
+/* LOADING */
+#loading{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+#loading h2{color:var(--red);font-size:20px;letter-spacing:3px;}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* HEADER */
+header{background:var(--bg2);border-bottom:2px solid var(--red);padding:0 24px;display:flex;align-items:center;gap:12px;height:54px;position:sticky;top:0;z-index:10;}
+header h1{font-size:16px;font-weight:900;letter-spacing:3px;color:var(--red);}
+.btn{background:var(--red);color:#fff;border:none;border-radius:4px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;transition:background .15s;}
+.btn:hover{background:var(--red-dark);}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--sub);}
+.btn-ghost:hover{border-color:var(--sub);color:var(--text);background:transparent;}
+#hdr-count{color:var(--sub);font-size:12px;margin-left:auto;}
+
+/* VIEWS */
+#view-list,#view-detail{padding:20px 24px;max-width:1140px;margin:0 auto;}
+
+/* FILTER BAR */
+.fbar{display:flex;flex-direction:column;gap:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:16px;}
+.fbar-row1{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.fbar label{font-size:11px;color:var(--sub);}
+.fbar select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 9px;font-size:12px;}
+.grp-btns{margin-left:auto;display:flex;gap:6px;align-items:center;}
+.grp-btns span{font-size:11px;color:var(--sub);}
+.tog{background:var(--bg3);border:1px solid var(--border);color:var(--sub);border-radius:4px;padding:4px 11px;font-size:11px;cursor:pointer;}
+.tog.on{background:var(--red);border-color:var(--red);color:#fff;}
+
+/* COMP FILTER ROW */
+.cf-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);margin-top:10px;padding-top:10px;}
+.cf-label{font-size:11px;color:var(--sub);white-space:nowrap;}
+.cf-side-tog{display:flex;border-radius:4px;overflow:hidden;border:1px solid var(--border);}
+.cf-side-btn{background:var(--bg4);border:none;color:var(--sub);padding:4px 12px;font-size:11px;cursor:pointer;font-weight:700;transition:all .1s;}
+.cf-side-btn.on.my{background:#1e3a5f;color:var(--def);}
+.cf-side-btn.on.en{background:#450a0a;color:var(--loss);}
+.cf-agents{display:flex;gap:4px;flex-wrap:wrap;align-items:center;min-height:32px;}
+.cf-aicon-wrap{position:relative;display:inline-block;cursor:pointer;}
+.cf-aicon{width:32px;height:32px;border-radius:4px;object-fit:cover;border:2px solid var(--border);display:block;transition:opacity .1s;}
+.cf-aicon-wrap:hover .cf-aicon{opacity:.5;}
+.cf-aicon-wrap::after{content:'✕';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:900;opacity:0;pointer-events:none;transition:opacity .1s;}
+.cf-aicon-wrap:hover::after{opacity:1;}
+.cf-add-btn{background:var(--bg4);border:1px dashed var(--border);color:var(--sub);border-radius:4px;padding:4px 10px;font-size:16px;line-height:1;cursor:pointer;transition:all .1s;}
+.cf-add-btn:hover{border-color:var(--sub);color:var(--text);}
+.cf-clear{font-size:11px;color:var(--sub);cursor:pointer;padding:2px 6px;border-radius:3px;border:1px solid transparent;}
+.cf-clear:hover{color:var(--loss);border-color:var(--loss);}
+
+/* CF PICKER POPUP */
+#cf-picker{position:fixed;z-index:200;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.7);max-width:480px;width:90vw;max-height:70vh;overflow-y:auto;}
+#cf-picker-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+#cf-picker-header span{font-size:12px;color:var(--sub);letter-spacing:1px;}
+#cf-picker-close{background:transparent;border:none;color:var(--sub);font-size:18px;cursor:pointer;}
+.cfp-role{margin-bottom:10px;}
+.cfp-role-title{font-size:10px;font-weight:800;letter-spacing:1px;margin-bottom:5px;}
+.cfp-icons{display:flex;flex-wrap:wrap;gap:4px;}
+.cfp-icon{width:38px;height:38px;border-radius:5px;object-fit:cover;cursor:pointer;border:2px solid transparent;background:var(--bg4);transition:border-color .1s,transform .1s;position:relative;}
+.cfp-icon:hover{border-color:var(--sub);transform:scale(1.08);}
+.cfp-icon.on{border-color:var(--red);}
+.cfp-icon.on::after{content:'✓';position:absolute;inset:0;background:rgba(255,70,85,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;}
+.cfp-icon .cfp-tip{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#000;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;white-space:nowrap;z-index:10;}
+.cfp-icon:hover .cfp-tip{display:block;}
+
+/* STATS */
+.stats{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.scard{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 18px;flex:1;min-width:100px;text-align:center;}
+.scard .v{font-size:22px;font-weight:800;}.scard .l{font-size:10px;color:var(--sub);margin-top:2px;}
+.scard.w .v{color:var(--win);}.scard.lo .v{color:var(--loss);}
+
+/* GROUP HEADER */
+.ghdr{background:var(--bg3);border-left:3px solid var(--red);padding:7px 12px;border-radius:0 4px 4px 0;font-size:12px;font-weight:700;color:var(--red);margin:16px 0 8px;letter-spacing:1px;}
+
+/* MATCH CARD */
+.mcard{background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:border-color .15s, transform .1s;display:flex;overflow:hidden;align-items:stretch;}
+.mcard:hover{border-color:var(--red);transform:translateY(-1px);}
+.mcard .bar{width:4px;flex-shrink:0;background:var(--border);}
+.mcard.win .bar{background:var(--win);}.mcard.loss .bar{background:var(--loss);}
+
+/* Map thumbnail in card */
+.mcard .map-thumb{width:110px;height:64px;object-fit:cover;flex-shrink:0;opacity:.85;}
+.mcard .map-nopic{width:110px;height:64px;flex-shrink:0;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--sub);}
+
+.mcard .inner{padding:10px 14px;flex:1;display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0;}
+.mcard .mname{font-size:14px;font-weight:700;min-width:70px;}
+.mcard .mscore{font-size:17px;font-weight:800;min-width:55px;}
+.mcard.win .mscore{color:var(--win);}.mcard.loss .mscore{color:var(--loss);}
+
+/* Agent icons in card */
+.icon-row{display:flex;gap:3px;align-items:center;flex-wrap:wrap;}
+.aicon{width:30px;height:30px;border-radius:4px;object-fit:cover;border:1px solid var(--border);background:var(--bg3);}
+.aicon-wrap{position:relative;display:inline-block;}
+.aicon-wrap .atip{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#000;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;white-space:nowrap;z-index:20;}
+.aicon-wrap:hover .atip{display:block;}
+.vs-sep{font-size:10px;color:var(--sub);padding:0 2px;}
+.mcard .mdate{color:var(--sub);font-size:11px;margin-left:auto;white-space:nowrap;}
+.mcard .ytbadge{color:#ff0000;font-size:12px;}
+.del-btn{background:transparent;border:none;color:var(--sub);cursor:pointer;padding:6px 10px;font-size:13px;transition:color .15s;flex-shrink:0;}
+.del-btn:hover{color:var(--loss);}
+
+/* DETAIL */
+.dhdr{display:flex;align-items:center;gap:10px;margin-bottom:20px;}
+.back{background:var(--bg3);border:1px solid var(--border);color:var(--sub);border-radius:4px;padding:6px 12px;font-size:12px;cursor:pointer;}
+.back:hover{color:var(--text);}
+.dhdr h2{font-size:20px;font-weight:800;}
+.rbadge{padding:3px 10px;border-radius:4px;font-size:12px;font-weight:800;letter-spacing:1px;}
+.rbadge.win{background:#14532d;color:var(--win);}.rbadge.loss{background:#450a0a;color:var(--loss);}
+
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+.fg{display:flex;flex-direction:column;gap:5px;}
+.fg.full{grid-column:1/-1;}
+.fg label{font-size:11px;color:var(--sub);letter-spacing:1px;}
+.fg input,.fg select,.fg textarea{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:8px 10px;font-size:13px;}
+.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--red);}
+.fg textarea{resize:vertical;min-height:60px;}
+
+/* MAP SELECTOR */
+.map-sel-btn{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:0;overflow:hidden;cursor:pointer;display:flex;align-items:center;gap:0;width:100%;transition:border-color .15s;}
+.map-sel-btn:hover{border-color:var(--red);}
+.map-sel-btn img{width:120px;height:50px;object-fit:cover;opacity:.8;}
+.map-sel-btn .map-sel-name{padding:0 14px;font-size:14px;font-weight:700;color:var(--text);}
+.map-sel-btn .map-sel-hint{font-size:11px;color:var(--sub);margin-left:auto;padding-right:12px;}
+
+/* MAP MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:800px;width:100%;max-height:85vh;overflow-y:auto;}
+.modal h3{font-size:14px;color:var(--sub);letter-spacing:2px;margin-bottom:14px;}
+.map-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+.map-card{border-radius:6px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .15s,transform .1s;position:relative;}
+.map-card:hover{border-color:var(--red);transform:scale(1.02);}
+.map-card.active{border-color:var(--red);}
+.map-card img{width:100%;height:100px;object-fit:cover;display:block;}
+.map-card .mclabel{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.8));padding:18px 10px 8px;font-size:13px;font-weight:700;color:#fff;}
+
+/* AGENT SELECTOR */
+.comp-box{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:4px;}
+/* 自分たちの構成 = 青背景 */
+.comp-box.mybox{background:#091829;border-color:#1a3a5c;}
+.comp-selected{display:flex;gap:6px;flex-wrap:wrap;min-height:44px;margin-bottom:10px;align-items:center;padding:4px 0;}
+.sel-aicon{width:40px;height:40px;border-radius:5px;object-fit:cover;border:2px solid var(--red);cursor:pointer;transition:transform .1s;}
+.sel-aicon:hover{transform:scale(1.1);}
+.comp-selected .placeholder{font-size:12px;color:var(--sub);}
+
+/* ロールグループ（選択済みアイコンの並び） */
+.sel-role-group{display:flex;align-items:center;gap:3px;position:relative;}
+.sel-role-group.dup{
+  border:2px solid var(--rc,#fff);
+  border-radius:7px;padding:3px 5px;
+  background:rgba(255,255,255,.04);
+}
+.dup-label{
+  position:absolute;top:-11px;left:50%;transform:translateX(-50%);
+  font-size:9px;font-weight:800;padding:1px 6px;border-radius:3px;
+  white-space:nowrap;letter-spacing:.5px;
+  background:var(--rc,#fff);color:#000;
+}
+
+/* ロールセクション */
+.role-section{margin-bottom:10px;border-radius:5px;overflow:hidden;}
+.role-section-inner{padding:6px 8px 8px 10px;border-left:3px solid var(--rc,var(--border));}
+.mybox .role-section-inner{background:rgba(255,255,255,.03);}
+.role-title{font-size:10px;font-weight:800;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+.role-title-bar{height:1px;flex:1;opacity:.3;}
+.agent-icon-grid{display:flex;flex-wrap:wrap;gap:5px;}
+.ag-btn{width:44px;height:44px;border-radius:5px;overflow:hidden;cursor:pointer;border:2px solid transparent;background:var(--bg4);transition:border-color .1s,transform .1s;position:relative;flex-shrink:0;}
+.ag-btn img{width:100%;height:100%;object-fit:cover;display:block;}
+.ag-btn:hover{border-color:var(--sub);transform:scale(1.08);}
+.ag-btn.selected{border-color:var(--rc,var(--red));}
+.ag-btn.selected::after{content:'✓';position:absolute;inset:0;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:900;}
+.ag-btn .ag-tip{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#000;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;white-space:nowrap;z-index:20;}
+.ag-btn:hover .ag-tip{display:block;}
+
+/* ROUNDS */
+.rounds-sec{margin-top:4px;}
+.rounds-sec h3{font-size:12px;color:var(--sub);letter-spacing:2px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.side-switcher{display:flex;align-items:center;gap:10px;margin-bottom:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 14px;}
+.side-switcher span{font-size:11px;color:var(--sub);letter-spacing:1px;margin-right:4px;}
+.side-btn{padding:6px 22px;border-radius:4px;border:2px solid var(--border);background:var(--bg4);color:var(--sub);font-size:13px;font-weight:800;cursor:pointer;letter-spacing:2px;transition:all .15s;}
+.side-btn.atk.on{background:#7c2d12;border-color:var(--atk);color:var(--atk);}
+.side-btn.def.on{background:#1e3a5f;border-color:var(--def);color:var(--def);}
+.side-btn:hover{border-color:var(--sub);}
+.side-hint{font-size:11px;color:var(--sub);margin-left:8px;}
+.half-label{font-size:10px;font-weight:700;letter-spacing:1px;padding:2px 6px;border-radius:3px;margin-right:4px;}
+.half-label.atk{background:#7c2d12;color:var(--atk);}
+.half-label.def{background:#1e3a5f;color:var(--def);}
+.rounds-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:6px;}
+.rrow{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;}
+.rtop{display:flex;align-items:center;gap:6px;}
+.rnum{font-size:11px;font-weight:700;color:var(--sub);width:26px;text-align:center;}
+.rsel{background:var(--bg4);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:3px 5px;font-size:11px;flex:1;}
+.rsel.ws{border-color:var(--win);color:var(--win);}
+.rsel.ls{border-color:var(--loss);color:var(--loss);}
+.rnote{background:var(--bg4);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 7px;font-size:12px;width:100%;resize:none;}
+.rnote:focus{outline:none;border-color:var(--red);}
+
+/* YT PREVIEW */
+.ytpv{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:7px 10px;font-size:11px;color:var(--sub);margin-top:4px;display:none;}
+.ytpv a{color:var(--red);text-decoration:none;}
+.ytpv img{margin-top:6px;border-radius:4px;max-width:180px;display:block;}
+
+/* SAVE BAR */
+.savebar{position:sticky;bottom:0;background:var(--bg2);border-top:1px solid var(--border);padding:12px 24px;display:flex;gap:10px;justify-content:flex-end;margin:20px -24px -20px;}
+
+.empty{text-align:center;padding:50px;color:var(--sub);}
+.empty p{font-size:13px;margin-top:8px;}
+
+/* SETTINGS & SYNC */
+.gear-btn{background:transparent;border:1px solid var(--border);color:var(--sub);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:14px;transition:all .15s;}
+.gear-btn:hover{color:var(--text);border-color:var(--sub);}
+#sync-indicator{font-size:11px;color:var(--sub);display:flex;align-items:center;gap:5px;}
+.sdot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.sdot.ok{background:var(--win);}.sdot.ing{background:var(--atk);animation:pulse .7s infinite;}
+.sdot.off{background:var(--sub);}.sdot.err{background:var(--loss);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.2;}}
+.cfg-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
+.cfg-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;}
+.cfg-box h3{font-size:15px;color:var(--red);letter-spacing:2px;margin-bottom:4px;}
+.cfg-box .cfg-sub{font-size:12px;color:var(--sub);margin-bottom:18px;}
+.cfg-field{margin-bottom:14px;}
+.cfg-field label{font-size:11px;color:var(--sub);display:block;margin-bottom:5px;letter-spacing:1px;}
+.cfg-field input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:8px 10px;font-size:12px;font-family:monospace;}
+.cfg-field input:focus{outline:none;border-color:var(--red);}
+.cfg-sql{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:10px 12px;font-size:11px;font-family:monospace;color:#7dd3fc;margin:10px 0;white-space:pre;overflow-x:auto;line-height:1.6;}
+.cfg-note{font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:12px;}
+.cfg-note a{color:var(--red);}
+.cfg-status{font-size:12px;margin-top:10px;padding:8px 10px;border-radius:4px;display:none;}
+.cfg-status.ok{display:block;background:#14532d;color:var(--win);}
+.cfg-status.err{display:block;background:#450a0a;color:var(--loss);}
+.refresh-btn{background:var(--bg3);border:1px solid var(--border);color:var(--sub);border-radius:4px;padding:5px 12px;font-size:12px;cursor:pointer;}
+.refresh-btn:hover{color:var(--text);}
+
+@media(max-width:600px){.fgrid{grid-template-columns:1fr;}.fg.full{grid-column:1;}.rounds-grid{grid-template-columns:1fr;}.mcard .map-thumb,.mcard .map-nopic{width:70px;height:50px;}}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <h2>LOADING...</h2>
+  <p style="color:var(--sub);font-size:12px;">エージェント・マップデータを取得中</p>
+</div>
+
+<header>
+  <h1>⟨ VALORANT FEEDBACK ⟩</h1>
+  <span id="sync-indicator"><span class="sdot off" id="sdot"></span><span id="stext">未接続</span></span>
+  <span id="hdr-count" style="color:var(--sub);font-size:12px;"></span>
+  <button class="refresh-btn" onclick="reloadMatches()" title="最新データを取得">↻ 更新</button>
+  <button class="btn" onclick="showNew()">＋ 試合を追加</button>
+  <button class="gear-btn" onclick="openCfg()" title="Supabase 設定">⚙</button>
+</header>
+
+<!-- SETTINGS MODAL -->
+<div class="cfg-bg" id="cfg-modal" style="display:none">
+  <div class="cfg-box">
+    <h3>⚙ SUPABASE 設定</h3>
+    <p class="cfg-sub">チームで同じデータを共有するための設定です。一度入力すれば保存されます。</p>
+
+    <p class="cfg-note">
+      <strong style="color:var(--text)">① Supabase アカウント作成</strong><br>
+      <a href="https://supabase.com" target="_blank">supabase.com</a> で無料アカウントを作り、新しいプロジェクトを作成してください。
+    </p>
+
+    <p class="cfg-note">
+      <strong style="color:var(--text)">② テーブルを作成（SQL Editorで実行）</strong>
+    </p>
+    <div class="cfg-sql">CREATE TABLE vfb_matches (
+  id TEXT PRIMARY KEY,
+  match_data JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE vfb_matches ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public_access" ON vfb_matches
+  FOR ALL TO anon USING (true) WITH CHECK (true);</div>
+
+    <p class="cfg-note">
+      <strong style="color:var(--text)">③ Project Settings → API から URL と anon key をコピー</strong>
+    </p>
+
+    <div class="cfg-field">
+      <label>PROJECT URL</label>
+      <input id="cfg-url" type="text" placeholder="https://xxxxxxxxxx.supabase.co">
+    </div>
+    <div class="cfg-field">
+      <label>ANON PUBLIC KEY</label>
+      <input id="cfg-key" type="text" placeholder="eyJhbGci...">
+    </div>
+    <div id="cfg-status" class="cfg-status"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeCfg()">閉じる</button>
+      <button class="btn" onclick="testAndSaveCfg()">接続テスト &amp; 保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- LIST VIEW -->
+<div id="view-list" style="display:none">
+  <div class="fbar">
+    <div class="fbar-row1">
+      <label>MAP</label>
+      <select id="f-map" onchange="renderList()"><option value="">すべて</option></select>
+      <label>結果</label>
+      <select id="f-result" onchange="renderList()">
+        <option value="">すべて</option><option value="win">WIN</option><option value="loss">LOSS</option>
+      </select>
+      <div class="grp-btns">
+        <span>グループ:</span>
+        <button class="tog on" id="g-none" onclick="setGroup('none')">なし</button>
+        <button class="tog" id="g-map" onclick="setGroup('map')">MAP</button>
+        <button class="tog" id="g-comp" onclick="setGroup('comp')">構成</button>
+      </div>
+    </div>
+    <!-- 構成フィルター -->
+    <div class="cf-row">
+      <span class="cf-label">構成フィルター</span>
+      <div class="cf-side-tog">
+        <button class="cf-side-btn my on" id="cf-my" onclick="setCFSide('my')">自分</button>
+        <button class="cf-side-btn en" id="cf-en" onclick="setCFSide('en')">敵</button>
+      </div>
+      <div class="cf-agents" id="cf-agents"><span style="font-size:11px;color:var(--sub)">未選択（最大5人）</span></div>
+      <button class="cf-add-btn" onclick="openCFPicker(event)">＋</button>
+      <span class="cf-clear" id="cf-clear" onclick="clearCF()" style="display:none">クリア</span>
+    </div>
+  </div>
+
+  <!-- CF PICKER POPUP -->
+  <div id="cf-picker" style="display:none">
+    <div id="cf-picker-header">
+      <span id="cf-picker-title">── エージェントを選択（最大5人）──</span>
+      <button id="cf-picker-close" onclick="closeCFPicker()">✕</button>
+    </div>
+    <div id="cf-picker-body"></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div id="mlist"></div>
+</div>
+
+<!-- DETAIL VIEW -->
+<div id="view-detail" style="display:none">
+  <div class="dhdr">
+    <button class="back" onclick="goList()">← 一覧</button>
+    <h2 id="dtitle">NEW MATCH</h2>
+    <span id="dbadge" class="rbadge"></span>
+  </div>
+
+  <div class="fgrid">
+    <!-- MAP -->
+    <div class="fg full">
+      <label>MAP</label>
+      <button class="map-sel-btn" id="map-sel-btn" onclick="openMapModal()">
+        <img id="map-sel-img" src="" alt="" style="display:none">
+        <span class="map-sel-name" id="map-sel-name">クリックして選択...</span>
+        <span class="map-sel-hint">▼</span>
+      </button>
+    </div>
+    <div class="fg">
+      <label>敵チーム名</label>
+      <input id="d-enemy-team" type="text" placeholder="例: Team SEN, 〇〇clan..." oninput="sf('enemyTeam',this.value)">
+    </div>
+    <div class="fg">
+      <label>スコア（例: 13-7）</label>
+      <input id="d-score" type="text" placeholder="13-7" oninput="sf('score',this.value);updateTitle()">
+    </div>
+    <div class="fg">
+      <label>結果</label>
+      <select id="d-result" onchange="sf('result',this.value);updateBadge()">
+        <option value="">選択...</option><option value="win">WIN</option><option value="loss">LOSS</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>日付</label>
+      <input id="d-date" type="date" oninput="sf('date',this.value)">
+    </div>
+    <div class="fg full">
+      <label>YouTube URL</label>
+      <input id="d-yt" type="text" placeholder="https://youtu.be/..." oninput="sf('youtubeUrl',this.value);previewYT()">
+      <div class="ytpv" id="ytpv"></div>
+    </div>
+  </div>
+
+  <!-- MY COMP -->
+  <div class="fg" style="margin-bottom:16px">
+    <label>自分たちの構成（最大5人）</label>
+    <div class="comp-box mybox">
+      <div class="comp-selected" id="my-sel"><span class="placeholder">未選択</span></div>
+      <div id="my-agent-grid"></div>
+    </div>
+  </div>
+
+  <!-- ENEMY COMP -->
+  <div class="fg" style="margin-bottom:20px">
+    <label>敵の構成（最大5人）</label>
+    <div class="comp-box">
+      <div class="comp-selected" id="en-sel"><span class="placeholder">未選択</span></div>
+      <div id="en-agent-grid"></div>
+    </div>
+  </div>
+
+  <div class="fg full" style="margin-bottom:20px">
+    <label>全体メモ</label>
+    <textarea id="d-memo" placeholder="試合全体の振り返り、反省点など..." oninput="sf('memo',this.value)"></textarea>
+  </div>
+
+  <div class="rounds-sec">
+    <h3>── ROUND LOG（24ラウンド）──</h3>
+    <div class="side-switcher">
+      <span>前半サイド</span>
+      <button class="side-btn atk" id="sw-atk" onclick="setSides('attack')">ATK</button>
+      <button class="side-btn def" id="sw-def" onclick="setSides('defense')">DEF</button>
+      <span class="side-hint">→ R1〜12 に適用、R13〜24 は自動で逆サイド</span>
+    </div>
+    <div class="rounds-grid" id="rounds-grid"></div>
+  </div>
+
+  <div class="savebar">
+    <button class="btn btn-ghost" onclick="goList()">閉じる</button>
+    <button class="btn" onclick="saveClose()">保存して一覧へ</button>
+  </div>
+</div>
+
+<!-- MAP MODAL -->
+<div class="modal-bg" id="map-modal" style="display:none" onclick="closeMapModal(event)">
+  <div class="modal">
+    <h3>── MAP を選択 ──</h3>
+    <div class="map-grid" id="map-grid"></div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────
+let matches = [];
+let currentId = null;
+let groupMode = 'none';
+let AGENT_DATA = [];
+let MAP_DATA   = [];
+
+// ── SUPABASE ───────────────────────────────────────────
+let sbClient = null;
+const TABLE = 'vfb_matches';
+const saveTimers = {};
+
+function initSB(){
+  const url = localStorage.getItem('vfb_sb_url');
+  const key = localStorage.getItem('vfb_sb_key');
+  if(!url || !key){ setSyncUI('off','未接続 — ⚙ 設定してください'); return false; }
+  try {
+    sbClient = supabase.createClient(url, key);
+    return true;
+  } catch(e){ setSyncUI('err','接続エラー'); return false; }
+}
+
+function setSyncUI(state, text){
+  document.getElementById('sdot').className = 'sdot '+state;
+  document.getElementById('stext').textContent = text;
+}
+
+async function loadMatchesFromDB(){
+  if(!sbClient){ matches = JSON.parse(localStorage.getItem('vfb2')||'[]'); return; }
+  setSyncUI('ing','読み込み中...');
+  const { data, error } = await sbClient.from(TABLE).select('*').order('created_at',{ascending:false});
+  if(error){ console.error(error); setSyncUI('err','読み込み失敗'); matches = JSON.parse(localStorage.getItem('vfb2')||'[]'); return; }
+  matches = data.map(r => r.match_data);
+  setSyncUI('ok', '同期中 ✓');
+}
+
+function save(){
+  if(!currentId) return;
+  // フォールバック用にlocalStorageにも保存
+  localStorage.setItem('vfb2', JSON.stringify(matches));
+  if(!sbClient) return;
+  // デバウンス（タイピング中の連続保存を防ぐ）
+  if(saveTimers[currentId]) clearTimeout(saveTimers[currentId]);
+  saveTimers[currentId] = setTimeout(() => upsertMatch(currentId), 800);
+}
+
+async function upsertMatch(id){
+  const m = gm(id);
+  if(!m || !sbClient) return;
+  setSyncUI('ing','保存中...');
+  const { error } = await sbClient.from(TABLE).upsert({ id, match_data: m });
+  if(error){ console.error(error); setSyncUI('err','保存失敗'); }
+  else setSyncUI('ok','保存完了 ✓');
+}
+
+async function deleteFromDB(id){
+  localStorage.setItem('vfb2', JSON.stringify(matches));
+  if(!sbClient) return;
+  setSyncUI('ing','削除中...');
+  const { error } = await sbClient.from(TABLE).delete().eq('id',id);
+  if(error){ console.error(error); setSyncUI('err','削除失敗'); }
+  else setSyncUI('ok','削除完了 ✓');
+}
+
+async function reloadMatches(){
+  await loadMatchesFromDB();
+  renderList();
+}
+
+// ── SETTINGS ──────────────────────────────────────────
+function openCfg(){
+  document.getElementById('cfg-url').value = localStorage.getItem('vfb_sb_url')||'';
+  document.getElementById('cfg-key').value = localStorage.getItem('vfb_sb_key')||'';
+  document.getElementById('cfg-status').className='cfg-status';
+  document.getElementById('cfg-modal').style.display='flex';
+}
+function closeCfg(){ document.getElementById('cfg-modal').style.display='none'; }
+
+async function testAndSaveCfg(){
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  const st = document.getElementById('cfg-status');
+  if(!url||!key){ st.className='cfg-status err'; st.textContent='URLとKeyを両方入力してください'; return; }
+  st.className='cfg-status'; st.textContent=''; // reset
+  try {
+    const testClient = supabase.createClient(url, key);
+    const { error } = await testClient.from(TABLE).select('id').limit(1);
+    if(error) throw error;
+    localStorage.setItem('vfb_sb_url', url);
+    localStorage.setItem('vfb_sb_key', key);
+    sbClient = testClient;
+    st.className='cfg-status ok'; st.textContent='✓ 接続成功！データを同期します...';
+    setSyncUI('ok','接続済み ✓');
+    await loadMatchesFromDB();
+    renderList();
+  } catch(e){
+    st.className='cfg-status err';
+    st.textContent='✗ 接続失敗：URLまたはKeyが正しくないか、テーブルが未作成です。'+e.message;
+  }
+}
+
+function gm(id){ return matches.find(m=>m.id===id); }
+
+// ── LOAD API DATA ──────────────────────────────────────
+async function loadData(){
+  try {
+    const [aRes, mRes] = await Promise.all([
+      fetch('https://valorant-api.com/v1/agents?isPlayableCharacter=true'),
+      fetch('https://valorant-api.com/v1/maps')
+    ]);
+    const aJson = await aRes.json();
+    const mJson = await mRes.json();
+
+    AGENT_DATA = aJson.data
+      .filter(a => a.isPlayableCharacter)
+      .map(a => ({
+        name: a.displayName,
+        icon: a.displayIcon,
+        role: a.role?.displayName?.toLowerCase() || 'unknown'
+      }))
+      .sort((a,b) => a.name.localeCompare(b.name));
+
+    // tacticalDescription（"2 Bombsites" など）が設定されているマップのみ = ランク・コンペ用マップ
+    // TDM・スカーミッシュ・練習場は null なので自動除外。新MAPが追加されても自動対応。
+    MAP_DATA = mJson.data
+      .filter(m => m.tacticalDescription && m.tacticalDescription.trim() !== '')
+      .map(m => ({
+        name: m.displayName,
+        splash: m.splash,
+        listIcon: m.listViewIcon || m.splash
+      }))
+      .sort((a,b) => a.name.localeCompare(b.name));
+
+  } catch(e) {
+    console.warn('API fetch failed, running without images', e);
+  }
+  // Supabase初期化 → マッチデータ読み込み
+  initSB();
+  await loadMatchesFromDB();
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('view-list').style.display = 'block';
+  renderList();
+}
+
+// ── LIST ───────────────────────────────────────────────
+function setGroup(g){
+  groupMode = g;
+  ['none','map','comp'].forEach(x=>{
+    document.getElementById('g-'+x).classList.toggle('on', x===g);
+  });
+  renderList();
+}
+
+// ── COMP FILTER STATE ──────────────────────────────────
+let cfSide = 'my';
+let cfAgents = [];
+
+function setCFSide(side){
+  cfSide = side;
+  document.getElementById('cf-my').classList.toggle('on', side==='my');
+  document.getElementById('cf-en').classList.toggle('on', side==='en');
+  // picker内のアイコンを更新
+  buildCFPicker();
+  renderList();
+}
+
+function toggleCFAgent(name){
+  const idx = cfAgents.indexOf(name);
+  if(idx>=0) cfAgents.splice(idx,1);
+  else { if(cfAgents.length>=5){alert('最大5人まで選択できます');return;} cfAgents.push(name); }
+  renderCFSelected();
+  // pickerのアイコン更新
+  document.querySelectorAll('.cfp-icon').forEach(el=>{
+    el.classList.toggle('on', cfAgents.includes(el.dataset.name));
+  });
+  renderList();
+}
+
+function clearCF(){
+  cfAgents=[];
+  renderCFSelected();
+  document.querySelectorAll('.cfp-icon').forEach(el=>el.classList.remove('on'));
+  renderList();
+}
+
+function renderCFSelected(){
+  const el=document.getElementById('cf-agents');
+  const cl=document.getElementById('cf-clear');
+  if(!cfAgents.length){
+    el.innerHTML='<span style="font-size:11px;color:var(--sub)">未選択（最大5人）</span>';
+    cl.style.display='none'; return;
+  }
+  cl.style.display='inline';
+  el.innerHTML=cfAgents.map(name=>{
+    const a=AGENT_DATA.find(x=>x.name===name);
+    return a
+      ? `<span class="cf-aicon-wrap" onclick="toggleCFAgent('${name}')" title="${name}"><img class="cf-aicon" src="${a.icon}" alt="${name}"></span>`
+      : `<span style="font-size:11px;background:var(--bg4);border-radius:3px;padding:2px 6px;cursor:pointer" onclick="toggleCFAgent('${name}')">${name} ✕</span>`;
+  }).join('');
+}
+
+function openCFPicker(e){
+  const picker=document.getElementById('cf-picker');
+  if(picker.style.display==='block'){closeCFPicker();return;}
+  buildCFPicker();
+  // ボタンの下に表示
+  const btn=e.currentTarget;
+  const rect=btn.getBoundingClientRect();
+  picker.style.display='block';
+  picker.style.top=(rect.bottom+window.scrollY+6)+'px';
+  picker.style.left=Math.min(rect.left, window.innerWidth-490)+'px';
+  // 外クリックで閉じる
+  setTimeout(()=>document.addEventListener('click',outsideCFClick),0);
+}
+
+function outsideCFClick(e){
+  const picker=document.getElementById('cf-picker');
+  if(!picker.contains(e.target) && !e.target.classList.contains('cf-add-btn')){
+    closeCFPicker();
+  }
+}
+
+function closeCFPicker(){
+  document.getElementById('cf-picker').style.display='none';
+  document.removeEventListener('click',outsideCFClick);
+}
+
+function buildCFPicker(){
+  const body=document.getElementById('cf-picker-body');
+  body.innerHTML='';
+  if(!AGENT_DATA.length){
+    body.innerHTML='<p style="font-size:12px;color:var(--sub)">読み込み中...</p>';
+    return;
+  }
+  ROLE_ORDER.forEach(role=>{
+    const agents=AGENT_DATA.filter(a=>a.role===role);
+    if(!agents.length) return;
+    const rc=ROLE_COLOR[role]||'var(--sub)';
+    const sec=document.createElement('div');
+    sec.className='cfp-role';
+    const iconsHTML=agents.map(a=>`
+      <div class="cfp-icon ${cfAgents.includes(a.name)?'on':''}" data-name="${a.name}" onclick="toggleCFAgent('${a.name}')">
+        <img src="${a.icon}" alt="${a.name}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:3px;display:block">
+        <span class="cfp-tip">${a.name}</span>
+      </div>`).join('');
+    sec.innerHTML=`<div class="cfp-role-title" style="color:${rc}">${(ROLE_JP[role]||role).toUpperCase()}</div>
+      <div class="cfp-icons">${iconsHTML}</div>`;
+    body.appendChild(sec);
+  });
+}
+
+function getFiltered(){
+  const fm = document.getElementById('f-map').value;
+  const fr = document.getElementById('f-result').value;
+  return matches.filter(m=>{
+    if(fm && m.map!==fm) return false;
+    if(fr && m.result!==fr) return false;
+    if(cfAgents.length){
+      const comp = cfSide==='my' ? m.myComp : m.enemyComp;
+      if(!cfAgents.every(a=>comp.includes(a))) return false;
+    }
+    return true;
+  });
+}
+
+function renderList(){
+  // map filter options
+  const fm = document.getElementById('f-map');
+  const prev = fm.value;
+  fm.innerHTML = '<option value="">すべて</option>';
+  MAP_DATA.forEach(m=>{const o=document.createElement('option');o.value=o.text=m.name;fm.appendChild(o);});
+  fm.value = prev;
+
+  const filtered = getFiltered();
+  document.getElementById('hdr-count').textContent = matches.length+'試合';
+
+  // stats
+  const wins=filtered.filter(m=>m.result==='win').length;
+  const losses=filtered.filter(m=>m.result==='loss').length;
+  const wr=filtered.length?Math.round(wins/filtered.length*100):0;
+  document.getElementById('stats').innerHTML=`
+    <div class="scard"><div class="v">${filtered.length}</div><div class="l">試合数</div></div>
+    <div class="scard w"><div class="v">${wins}</div><div class="l">WIN</div></div>
+    <div class="scard lo"><div class="v">${losses}</div><div class="l">LOSS</div></div>
+    <div class="scard"><div class="v">${wr}%</div><div class="l">勝率</div></div>`;
+
+  const el = document.getElementById('mlist');
+  if(!filtered.length){
+    el.innerHTML='<div class="empty"><div style="font-size:32px">📋</div><p>試合記録がありません</p></div>';
+    return;
+  }
+
+  let groups = {};
+  if(groupMode==='none') groups['']=filtered;
+  else if(groupMode==='map') filtered.forEach(m=>{const k=m.map||'未設定';(groups[k]=groups[k]||[]).push(m);});
+  else filtered.forEach(m=>{const k=m.myComp.slice().sort().join('+')||'未設定';(groups[k]=groups[k]||[]).push(m);});
+
+  let html='';
+  Object.entries(groups).forEach(([key,ms])=>{
+    if(groupMode!=='none'){
+      const w=ms.filter(x=>x.result==='win').length;
+      let ghdrContent='';
+      if(groupMode==='map'){
+        const mi=MAP_DATA.find(x=>x.name===key);
+        const mapThumb=mi?`<img src="${mi.listIcon}" style="height:20px;border-radius:2px;vertical-align:middle;margin-right:6px">`:'';
+        ghdrContent=mapThumb+key;
+      } else {
+        // comp group: show agent icons
+        const sampleComp=ms[0].myComp||[];
+        const icons=sampleComp.map(n=>{
+          const a=AGENT_DATA.find(x=>x.name===n);
+          return a?`<img src="${a.icon}" style="width:20px;height:20px;border-radius:3px;object-fit:cover;vertical-align:middle">`:n;
+        }).join('');
+        ghdrContent=icons||key;
+      }
+      html+=`<div class="ghdr">${ghdrContent} &nbsp;—&nbsp; ${ms.length}試合 ${w}W ${ms.length-w}L</div>`;
+    }
+    ms.forEach(m=>{ html+=cardHTML(m); });
+  });
+  el.innerHTML=html;
+}
+
+function cardHTML(m){
+  const mapInfo = MAP_DATA.find(x=>x.name===m.map);
+  const thumbHTML = mapInfo
+    ? `<img class="map-thumb" src="${mapInfo.listIcon}" alt="${m.map}" loading="lazy">`
+    : `<div class="map-nopic">${m.map||'—'}</div>`;
+
+  const myIcons = m.myComp.map(a=>{
+    const ai=AGENT_DATA.find(x=>x.name===a);
+    return ai
+      ? `<span class="aicon-wrap"><img class="aicon" src="${ai.icon}" alt="${a}" title="${a}" loading="lazy"><span class="atip">${a}</span></span>`
+      : `<span class="aicon-wrap"><div class="aicon" style="display:flex;align-items:center;justify-content:center;font-size:9px">${a.slice(0,3)}</div></span>`;
+  }).join('');
+  const enIcons = m.enemyComp.map(a=>{
+    const ai=AGENT_DATA.find(x=>x.name===a);
+    return ai
+      ? `<span class="aicon-wrap"><img class="aicon" src="${ai.icon}" alt="${a}" loading="lazy"><span class="atip">${a}</span></span>`
+      : `<span class="aicon-wrap"><div class="aicon" style="display:flex;align-items:center;justify-content:center;font-size:9px">${a.slice(0,3)}</div></span>`;
+  }).join('');
+
+  const ytBadge = m.youtubeUrl ? '<span class="ytbadge" title="YouTube">▶</span>' : '';
+  return `
+    <div class="mcard ${m.result||''}" onclick="openMatch('${m.id}')">
+      <div class="bar"></div>
+      ${thumbHTML}
+      <div class="inner">
+        <div>
+          <div class="mname">${m.map||'—'}</div>
+          <div class="mscore">${m.score||'-'}</div>
+          ${m.enemyTeam?`<div style="font-size:10px;color:var(--sub);margin-top:2px">vs ${m.enemyTeam}</div>`:''}
+        </div>
+        <div>
+          <div class="icon-row">${myIcons||'<span style="font-size:11px;color:var(--sub)">未選択</span>'}</div>
+          ${(myIcons&&enIcons)?'<div class="icon-row" style="margin-top:3px"><span class="vs-sep">vs</span>'+enIcons+'</div>':''}
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+          ${ytBadge}
+          <span class="mdate">${m.date||''}</span>
+          <button class="del-btn" onclick="delMatch(event,'${m.id}')">✕</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function delMatch(e,id){
+  e.stopPropagation();
+  if(!confirm('削除しますか？')) return;
+  matches=matches.filter(m=>m.id!==id);
+  deleteFromDB(id);
+  renderList();
+}
+
+// ── DETAIL ─────────────────────────────────────────────
+function showNew(){
+  const id=Date.now().toString();
+  const rounds=Array.from({length:24},(_,i)=>({number:i+1,side:i<12?'attack':'defense',result:'',note:''}));
+  const m={id,date:new Date().toISOString().slice(0,10),map:'',score:'',result:'',enemyTeam:'',youtubeUrl:'',myComp:[],enemyComp:[],memo:'',rounds};
+  matches.unshift(m);
+  currentId=id;
+  upsertMatch(id); // 新規作成をすぐDB保存
+  openMatch(id);
+}
+
+function openMatch(id){
+  currentId=id;
+  const m=gm(id);
+  document.getElementById('view-list').style.display='none';
+  document.getElementById('view-detail').style.display='block';
+  document.getElementById('d-enemy-team').value=m.enemyTeam||'';
+  document.getElementById('d-score').value=m.score||'';
+  document.getElementById('d-result').value=m.result||'';
+  document.getElementById('d-date').value=m.date||'';
+  document.getElementById('d-yt').value=m.youtubeUrl||'';
+  document.getElementById('d-memo').value=m.memo||'';
+  setMapBtn(m.map);
+  buildAgentGrids(m);
+  buildRounds(m);
+  updateTitle(); updateBadge(); previewYT();
+  window.scrollTo(0,0);
+}
+
+function goList(){
+  currentId=null;
+  document.getElementById('view-detail').style.display='none';
+  document.getElementById('view-list').style.display='block';
+  renderList();
+}
+
+function sf(f,v){ if(currentId) gm(currentId)[f]=v; save(); }
+
+function updateTitle(){
+  const m=gm(currentId);
+  document.getElementById('dtitle').textContent=[m.map||'NEW MATCH',m.score].filter(Boolean).join('  ');
+}
+function updateBadge(){
+  const m=gm(currentId);
+  const b=document.getElementById('dbadge');
+  b.textContent=m.result?m.result.toUpperCase():'';
+  b.className='rbadge '+(m.result||'');
+}
+function previewYT(){
+  const url=document.getElementById('d-yt').value.trim();
+  const pv=document.getElementById('ytpv');
+  if(!url){pv.style.display='none';return;}
+  const vid=url.match(/(?:youtu\.be\/|v=|shorts\/)([A-Za-z0-9_-]{11})/);
+  pv.style.display='block';
+  if(vid) pv.innerHTML=`▶ <a href="${url}" target="_blank">YouTube で開く</a><br><img src="https://img.youtube.com/vi/${vid[1]}/mqdefault.jpg" loading="lazy">`;
+  else pv.innerHTML=`▶ <a href="${url}" target="_blank">${url}</a>`;
+}
+
+// ── MAP MODAL ──────────────────────────────────────────
+function openMapModal(){
+  const modal=document.getElementById('map-modal');
+  const grid=document.getElementById('map-grid');
+  const cur=gm(currentId)?.map||'';
+  grid.innerHTML=MAP_DATA.map(m=>`
+    <div class="map-card ${m.name===cur?'active':''}" onclick="selectMap('${m.name}')">
+      <img src="${m.splash}" alt="${m.name}" loading="lazy">
+      <div class="mclabel">${m.name}</div>
+    </div>`).join('');
+  if(!MAP_DATA.length){
+    grid.innerHTML='<p style="color:var(--sub);font-size:13px">マップデータを読み込めませんでした。オフラインの可能性があります。</p>';
+  }
+  modal.style.display='flex';
+}
+function closeMapModal(e){ if(e.target===document.getElementById('map-modal')) document.getElementById('map-modal').style.display='none'; }
+function selectMap(name){
+  sf('map',name);
+  setMapBtn(name);
+  document.getElementById('map-modal').style.display='none';
+  updateTitle();
+}
+function setMapBtn(name){
+  const img=document.getElementById('map-sel-img');
+  const lbl=document.getElementById('map-sel-name');
+  const info=MAP_DATA.find(m=>m.name===name);
+  if(info){ img.src=info.listIcon; img.style.display='block'; lbl.textContent=name; }
+  else { img.style.display='none'; lbl.textContent=name||'クリックして選択...'; }
+}
+
+// ── AGENT GRIDS ────────────────────────────────────────
+const ROLE_ORDER=['duelist','initiator','controller','sentinel'];
+const ROLE_JP={duelist:'デュエリスト',initiator:'イニシエーター',controller:'コントローラー',sentinel:'センチネル'};
+const ROLE_COLOR={duelist:'#f87171',initiator:'#fb923c',controller:'#a78bfa',sentinel:'#60a5fa'};
+
+function buildAgentGrids(m){
+  buildGrid('my', m.myComp, 5);
+  buildGrid('en', m.enemyComp, 5);
+}
+
+function buildGrid(prefix, selected, max){
+  const grid=document.getElementById(prefix+'-agent-grid');
+  grid.innerHTML='';
+  const roles=ROLE_ORDER.filter(r=>AGENT_DATA.some(a=>a.role===r));
+  roles.forEach(role=>{
+    const agents=AGENT_DATA.filter(a=>a.role===role);
+    if(!agents.length) return;
+    const rc = ROLE_COLOR[role]||'var(--sub)';
+    const sec=document.createElement('div');
+    sec.className='role-section';
+    sec.innerHTML=`
+      <div class="role-section-inner" style="--rc:${rc}">
+        <div class="role-title" style="color:${rc}">
+          ${(ROLE_JP[role]||role).toUpperCase()}
+          <div class="role-title-bar" style="background:${rc}"></div>
+        </div>
+        <div class="agent-icon-grid" id="${prefix}-role-${role}"></div>
+      </div>`;
+    grid.appendChild(sec);
+    const row=sec.querySelector('.agent-icon-grid');
+    agents.forEach(a=>{
+      const btn=document.createElement('div');
+      btn.className='ag-btn'+(selected.includes(a.name)?' selected':'');
+      btn.style.setProperty('--rc', rc);
+      btn.id=prefix+'-ag-'+a.name.replace(/[^a-z]/gi,'_');
+      btn.dataset.role=role;
+      btn.innerHTML=`<img src="${a.icon}" alt="${a.name}" loading="lazy"><span class="ag-tip">${a.name}</span>`;
+      btn.onclick=()=>toggleAgent(prefix,a.name,max,rc);
+      row.appendChild(btn);
+    });
+  });
+  if(!AGENT_DATA.length){
+    grid.innerHTML='<p style="font-size:12px;color:var(--sub)">エージェントデータを取得できませんでした。</p>';
+  }
+  renderSelRow(prefix, selected);
+}
+
+function toggleAgent(prefix,name,max){
+  const m=gm(currentId);
+  const field=prefix==='my'?'myComp':'enemyComp';
+  const arr=m[field];
+  const idx=arr.indexOf(name);
+  if(idx>=0) arr.splice(idx,1);
+  else { if(arr.length>=max){alert('最大'+max+'人まで');return;} arr.push(name); }
+  save();
+  const btn=document.getElementById(prefix+'-ag-'+name.replace(/[^a-z]/gi,'_'));
+  if(btn) btn.classList.toggle('selected', idx<0);
+  renderSelRow(prefix, arr);
+}
+
+
+function renderSelRow(prefix, arr){
+  const el=document.getElementById(prefix+'-sel');
+  if(!arr.length){el.innerHTML='<span class="placeholder">未選択</span>';return;}
+
+  if(prefix==='my'){
+    // ロール順に並べ、同じロールが2人いたら枠でまとめて強調
+    const byRole={};
+    ROLE_ORDER.forEach(r=>byRole[r]=[]);
+    arr.forEach(name=>{
+      const a=AGENT_DATA.find(x=>x.name===name);
+      const role=a?.role||'unknown';
+      if(!byRole[role]) byRole[role]=[];
+      byRole[role].push({name,a});
+    });
+    let html='';
+    ROLE_ORDER.forEach(role=>{
+      const agents=byRole[role]||[];
+      if(!agents.length) return;
+      const rc=ROLE_COLOR[role]||'#fff';
+      const isDup=agents.length>=2;
+      const icons=agents.map(({name,a})=>
+        a ? `<img class="sel-aicon" src="${a.icon}" alt="${name}" title="${name}"
+               onclick="toggleAgent('my','${name}',5)" loading="lazy"
+               style="border-color:${rc}">`
+          : `<span style="font-size:11px">${name}</span>`
+      ).join('');
+      if(isDup){
+        html+=`<div class="sel-role-group dup" style="--rc:${rc}">
+          <span class="dup-label" style="background:${rc};color:#000">${ROLE_JP[role]||role} ×2</span>
+          ${icons}</div>`;
+      } else {
+        html+=`<div class="sel-role-group">${icons}</div>`;
+      }
+    });
+    el.innerHTML=html||'<span class="placeholder">未選択</span>';
+  } else {
+    // 敵構成はシンプル表示
+    el.innerHTML=arr.map(name=>{
+      const a=AGENT_DATA.find(x=>x.name===name);
+      return a
+        ? `<img class="sel-aicon" src="${a.icon}" alt="${name}" title="${name}" onclick="toggleAgent('en','${name}',5)" loading="lazy">`
+        : `<span style="font-size:11px;background:var(--bg4);border-radius:4px;padding:4px 7px">${name}</span>`;
+    }).join('');
+  }
+}
+
+// ── ROUNDS ─────────────────────────────────────────────
+function buildRounds(m){
+  // 前半サイドトグルの状態を反映
+  const firstSide = m.rounds[0]?.side || 'attack';
+  updateSideSwitcher(firstSide);
+
+  const grid=document.getElementById('rounds-grid');
+  grid.innerHTML='';
+  m.rounds.forEach((r,i)=>{
+    const isFirst = i < 12;
+    const halfLabel = isFirst
+      ? `<span class="half-label ${r.side==='attack'?'atk':'def'}" id="hl-${i}">${r.side==='attack'?'ATK':'DEF'}</span>`
+      : `<span class="half-label ${r.side==='attack'?'atk':'def'}" id="hl-${i}">${r.side==='attack'?'ATK':'DEF'}</span>`;
+    const div=document.createElement('div');
+    div.className='rrow';
+    div.innerHTML=`
+      <div class="rtop">
+        <span class="rnum">R${r.number}</span>
+        ${halfLabel}
+        <select class="rsel ${r.result==='win'?'ws':r.result==='loss'?'ls':''}" id="rr-${i}"
+          onchange="saveRound(${i},'result',this.value);colorR(${i},this.value)">
+          <option value="">—</option>
+          <option value="win" ${r.result==='win'?'selected':''}>WIN</option>
+          <option value="loss" ${r.result==='loss'?'selected':''}>LOSS</option>
+        </select>
+      </div>
+      <textarea class="rnote" rows="2" placeholder="立ち回り・判断ミスなど"
+        oninput="saveRound(${i},'note',this.value)">${r.note||''}</textarea>`;
+    grid.appendChild(div);
+  });
+}
+
+function setSides(firstHalf){
+  const m = gm(currentId);
+  const secondHalf = firstHalf === 'attack' ? 'defense' : 'attack';
+  m.rounds.forEach((r,i)=>{ r.side = i < 12 ? firstHalf : secondHalf; });
+  save();
+  // ラベル更新（再描画なしで軽量に）
+  m.rounds.forEach((r,i)=>{
+    const hl = document.getElementById('hl-'+i);
+    if(hl){
+      hl.className='half-label '+(r.side==='attack'?'atk':'def');
+      hl.textContent = r.side==='attack'?'ATK':'DEF';
+    }
+  });
+  updateSideSwitcher(firstHalf);
+}
+
+function updateSideSwitcher(firstSide){
+  document.getElementById('sw-atk').classList.toggle('on', firstSide==='attack');
+  document.getElementById('sw-def').classList.toggle('on', firstSide==='defense');
+}
+function saveRound(i,f,v){ if(currentId){gm(currentId).rounds[i][f]=v;save();} }
+function colorR(i,v){ const s=document.getElementById('rr-'+i); s.className='rsel '+(v==='win'?'ws':v==='loss'?'ls':''); }
+function saveClose(){ save(); goList(); }
+
+// ── INIT ───────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>

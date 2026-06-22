@@ -207,6 +207,30 @@ header h1{font-size:16px;font-weight:900;letter-spacing:3px;color:var(--red);}
 .rnote{background:var(--bg4);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 7px;font-size:12px;width:100%;resize:none;}
 .rnote:focus{outline:none;border-color:var(--red);}
 
+/* PRESETS */
+.preset-bar{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.preset-bar label{font-size:11px;color:var(--sub);letter-spacing:1px;flex:1;}
+.preset-btn{background:var(--bg4);border:1px solid var(--border);color:var(--sub);border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;transition:all .1s;}
+.preset-btn:hover{border-color:var(--sub);color:var(--text);}
+.preset-btn.save{border-color:#1e3a5f;color:var(--def);}
+.preset-btn.save:hover{background:#1e3a5f;}
+.preset-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px;}
+.preset-modal{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto;}
+.preset-modal h3{font-size:13px;color:var(--sub);letter-spacing:2px;margin-bottom:14px;}
+.preset-list{display:flex;flex-direction:column;gap:8px;}
+.preset-item{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px;}
+.preset-item .p-name{font-size:13px;font-weight:700;min-width:80px;}
+.preset-item .p-icons{display:flex;gap:3px;flex:1;flex-wrap:wrap;}
+.preset-item .p-icon{width:28px;height:28px;border-radius:3px;object-fit:cover;border:1px solid var(--border);}
+.preset-item .p-apply-my{background:#1e3a5f;border:1px solid var(--def);color:var(--def);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;font-weight:700;white-space:nowrap;}
+.preset-item .p-apply-en{background:#2d1a1a;border:1px solid var(--loss);color:var(--loss);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;font-weight:700;white-space:nowrap;}
+.preset-item .p-del{background:transparent;border:none;color:var(--sub);cursor:pointer;font-size:14px;padding:2px 6px;}
+.preset-item .p-del:hover{color:var(--loss);}
+.preset-save-form{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:12px;display:flex;gap:8px;align-items:center;}
+.preset-save-form input{flex:1;background:var(--bg4);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:6px 10px;font-size:12px;}
+.preset-save-form input:focus{outline:none;border-color:var(--def);}
+.preset-empty{font-size:12px;color:var(--sub);text-align:center;padding:16px;}
+
 /* YT PREVIEW */
 .ytpv{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:7px 10px;font-size:11px;color:var(--sub);margin-top:4px;display:none;}
 .ytpv a{color:var(--red);text-decoration:none;}
@@ -394,7 +418,11 @@ CREATE POLICY "public_access" ON vfb_matches
 
   <!-- MY COMP -->
   <div class="fg" style="margin-bottom:16px">
-    <label>自分たちの構成（最大5人）</label>
+    <div class="preset-bar">
+      <label>自分たちの構成（最大5人）</label>
+      <button class="preset-btn save" onclick="savePreset()">💾 プリセット保存</button>
+      <button class="preset-btn" onclick="openPresetModal()">📋 プリセット呼び出し</button>
+    </div>
     <div class="comp-box mybox">
       <div class="comp-selected" id="my-sel"><span class="placeholder">未選択</span></div>
       <div id="my-agent-grid"></div>
@@ -407,6 +435,18 @@ CREATE POLICY "public_access" ON vfb_matches
     <div class="comp-box">
       <div class="comp-selected" id="en-sel"><span class="placeholder">未選択</span></div>
       <div id="en-agent-grid"></div>
+    </div>
+  </div>
+
+  <!-- PRESET MODAL -->
+  <div class="preset-modal-bg" id="preset-modal" style="display:none" onclick="closePresetModal(event)">
+    <div class="preset-modal">
+      <h3>── 構成プリセット ──</h3>
+      <div class="preset-save-form">
+        <input id="preset-name-input" type="text" placeholder="プリセット名（例: メインコンプ）" maxlength="20">
+        <button class="btn btn-sm" onclick="doSavePreset()">保存</button>
+      </div>
+      <div class="preset-list" id="preset-list"></div>
     </div>
   </div>
 
@@ -1064,6 +1104,89 @@ function updateSideSwitcher(firstSide){
 function saveRound(i,f,v){ if(currentId){gm(currentId).rounds[i][f]=v;save();} }
 function colorR(i,v){ const s=document.getElementById('rr-'+i); s.className='rsel '+(v==='win'?'ws':v==='loss'?'ls':''); }
 function saveClose(){ save(); goList(); }
+
+// ── PRESETS ────────────────────────────────────────────
+function getPresets(){ return JSON.parse(localStorage.getItem('vfb_presets')||'[]'); }
+function setPresets(p){ localStorage.setItem('vfb_presets', JSON.stringify(p)); }
+
+function savePreset(){
+  const m = gm(currentId);
+  if(!m || !m.myComp.length){ alert('先に構成を選択してください'); return; }
+  document.getElementById('preset-name-input').value = '';
+  openPresetModal();
+  document.getElementById('preset-name-input').focus();
+}
+
+function doSavePreset(){
+  const name = document.getElementById('preset-name-input').value.trim();
+  if(!name){ alert('プリセット名を入力してください'); return; }
+  const m = gm(currentId);
+  if(!m || !m.myComp.length){ alert('構成が選択されていません'); return; }
+  const presets = getPresets();
+  // 同名があれば上書き確認
+  const existing = presets.findIndex(p=>p.name===name);
+  if(existing>=0){
+    if(!confirm(`「${name}」は既にあります。上書きしますか？`)) return;
+    presets[existing].agents = [...m.myComp];
+  } else {
+    presets.push({ name, agents: [...m.myComp] });
+  }
+  setPresets(presets);
+  document.getElementById('preset-name-input').value='';
+  renderPresetList();
+}
+
+function openPresetModal(){
+  renderPresetList();
+  document.getElementById('preset-modal').style.display='flex';
+}
+
+function closePresetModal(e){
+  if(e.target===document.getElementById('preset-modal'))
+    document.getElementById('preset-modal').style.display='none';
+}
+
+function applyPreset(idx, target){
+  const preset = getPresets()[idx];
+  if(!preset) return;
+  const m = gm(currentId);
+  if(!m) return;
+  const field = target==='my' ? 'myComp' : 'enemyComp';
+  m[field] = [...preset.agents];
+  save();
+  buildAgentGrids(m);
+  document.getElementById('preset-modal').style.display='none';
+}
+
+function deletePreset(idx){
+  const presets = getPresets();
+  if(!confirm(`「${presets[idx].name}」を削除しますか？`)) return;
+  presets.splice(idx,1);
+  setPresets(presets);
+  renderPresetList();
+}
+
+function renderPresetList(){
+  const list = document.getElementById('preset-list');
+  const presets = getPresets();
+  if(!presets.length){
+    list.innerHTML='<div class="preset-empty">保存済みプリセットがありません<br><span style="font-size:10px">「💾 プリセット保存」で構成を保存できます</span></div>';
+    return;
+  }
+  list.innerHTML = presets.map((p,i)=>{
+    const icons = p.agents.map(name=>{
+      const a = AGENT_DATA.find(x=>x.name===name);
+      return a ? `<img class="p-icon" src="${a.icon}" alt="${name}" title="${name}" loading="lazy">` : `<span style="font-size:10px">${name}</span>`;
+    }).join('');
+    return `<div class="preset-item">
+      <span class="p-name">${p.name}</span>
+      <div class="p-icons">${icons}</div>
+      <button class="p-apply-my" onclick="applyPreset(${i},'my')">自分に適用</button>
+      <button class="p-apply-en" onclick="applyPreset(${i},'en')">敵に適用</button>
+      <button class="p-del" onclick="deletePreset(${i})" title="削除">✕</button>
+    </div>`;
+  }).join('');
+}
 
 // ── INIT ───────────────────────────────────────────────
 loadData();

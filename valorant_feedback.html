@@ -231,6 +231,31 @@ header h1{font-size:16px;font-weight:900;letter-spacing:3px;color:var(--red);}
 .preset-save-form input:focus{outline:none;border-color:var(--def);}
 .preset-empty{font-size:12px;color:var(--sub);text-align:center;padding:16px;}
 
+/* TABS */
+.tab-bar{background:var(--bg2);border-bottom:1px solid var(--border);display:flex;gap:0;padding:0 24px;position:sticky;top:54px;z-index:9;}
+.tab-btn{background:transparent;border:none;border-bottom:3px solid transparent;color:var(--sub);padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:1px;transition:all .15s;}
+.tab-btn:hover{color:var(--text);}
+.tab-btn.on{color:var(--text);border-bottom-color:var(--red);}
+.tab-btn.tourn.on{border-bottom-color:#f59e0b;color:#f59e0b;}
+
+/* TOURNAMENT FIELDS */
+.tourn-fields{background:#1a1500;border:1px solid #3d2e00;border-radius:6px;padding:12px 14px;margin-bottom:16px;display:none;}
+.tourn-fields.show{display:block;}
+.tourn-badge{background:#3d2e00;color:#f59e0b;font-size:10px;font-weight:800;padding:2px 8px;border-radius:3px;letter-spacing:1px;margin-left:8px;}
+
+/* SUMMARY NOTES */
+.summary-sec{margin-top:4px;margin-bottom:20px;}
+.summary-sec h3{font-size:12px;color:var(--sub);letter-spacing:2px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.copy-btn{background:var(--bg3);border:1px solid var(--border);color:var(--sub);border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;margin-left:auto;transition:all .15s;}
+.copy-btn:hover{border-color:var(--win);color:var(--win);}
+.summary-ta{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:12px 14px;font-size:13px;line-height:1.8;resize:vertical;min-height:120px;font-family:'Segoe UI',sans-serif;}
+.summary-ta:focus{outline:none;border-color:var(--red);}
+.summary-hint{font-size:11px;color:var(--sub);margin-top:5px;}
+
+/* TOAST */
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#14532d;color:var(--win);border:1px solid var(--win);border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;}
+.toast.show{opacity:1;}
+
 /* YT PREVIEW */
 .ytpv{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:7px 10px;font-size:11px;color:var(--sub);margin-top:4px;display:none;}
 .ytpv a{color:var(--red);text-decoration:none;}
@@ -284,9 +309,15 @@ header h1{font-size:16px;font-weight:900;letter-spacing:3px;color:var(--red);}
   <span id="sync-indicator"><span class="sdot off" id="sdot"></span><span id="stext">未接続</span></span>
   <span id="hdr-count" style="color:var(--sub);font-size:12px;"></span>
   <button class="refresh-btn" onclick="reloadMatches()" title="最新データを取得">↻ 更新</button>
-  <button class="btn" onclick="showNew()">＋ 試合を追加</button>
+  <button class="btn" id="add-btn" onclick="showNew()">＋ 試合を追加</button>
   <button class="gear-btn" onclick="openCfg()" title="Supabase 設定">⚙</button>
 </header>
+
+<!-- TAB BAR -->
+<div class="tab-bar" id="tab-bar" style="display:none">
+  <button class="tab-btn on" id="tab-match" onclick="switchTab('match')">マイマッチ</button>
+  <button class="tab-btn tourn" id="tab-tourn" onclick="switchTab('tourn')">🏆 大会観戦</button>
+</div>
 
 <!-- SETTINGS MODAL -->
 <div class="cfg-bg" id="cfg-modal" style="display:none">
@@ -381,6 +412,25 @@ CREATE POLICY "public_access" ON vfb_matches
     <span id="dbadge" class="rbadge"></span>
   </div>
 
+  <!-- TOURNAMENT FIELDS (hidden for match type) -->
+  <div class="tourn-fields" id="tourn-fields">
+    <div style="font-size:11px;color:#f59e0b;font-weight:800;letter-spacing:2px;margin-bottom:10px">🏆 大会観戦</div>
+    <div class="fgrid" style="margin:0">
+      <div class="fg full">
+        <label>大会名</label>
+        <input id="d-tourn-name" type="text" placeholder="例: VCT 2025 Pacific Stage 1" oninput="sf('tournName',this.value);updateTitle()">
+      </div>
+      <div class="fg">
+        <label>チームA（青）</label>
+        <input id="d-team-a" type="text" placeholder="例: ZETA DIVISION" oninput="sf('teamA',this.value)">
+      </div>
+      <div class="fg">
+        <label>チームB（赤）</label>
+        <input id="d-team-b" type="text" placeholder="例: Paper Rex" oninput="sf('teamB',this.value)">
+      </div>
+    </div>
+  </div>
+
   <div class="fgrid">
     <!-- MAP -->
     <div class="fg full">
@@ -391,8 +441,8 @@ CREATE POLICY "public_access" ON vfb_matches
         <span class="map-sel-hint">▼</span>
       </button>
     </div>
-    <div class="fg">
-      <label>敵チーム名</label>
+    <div class="fg" id="enemy-team-row">
+      <label id="enemy-team-lbl">敵チーム名</label>
       <input id="d-enemy-team" type="text" placeholder="例: Team SEN, 〇〇clan..." oninput="sf('enemyTeam',this.value)">
     </div>
     <div class="fg">
@@ -453,6 +503,19 @@ CREATE POLICY "public_access" ON vfb_matches
   <div class="fg full" style="margin-bottom:20px">
     <label>全体メモ</label>
     <textarea id="d-memo" placeholder="試合全体の振り返り、反省点など..." oninput="sf('memo',this.value)"></textarea>
+  </div>
+
+  <!-- まとめノート -->
+  <div class="summary-sec">
+    <h3>
+      📋 まとめノート
+      <button class="copy-btn" onclick="copyNotes()">📋 コピー</button>
+    </h3>
+    <textarea class="summary-ta" id="d-summary"
+      placeholder="• 重要ポイントを箇条書きで...&#10;• Enterで次の行に • が自動で付きます"
+      oninput="sf('summaryNotes',this.value)"
+      onkeydown="bulletEnter(event)"></textarea>
+    <div class="summary-hint">Enterキーで自動的に「• 」が付きます ／ 「📋 コピー」でクリップボードにコピー</div>
   </div>
 
   <div class="rounds-sec">
@@ -622,6 +685,7 @@ async function loadData(){
   await loadMatchesFromDB();
   document.getElementById('loading').style.display = 'none';
   document.getElementById('view-list').style.display = 'block';
+  document.getElementById('tab-bar').style.display = 'flex';
   renderList();
 }
 
@@ -736,6 +800,9 @@ function getFiltered(){
   const fm = document.getElementById('f-map').value;
   const fr = document.getElementById('f-result').value;
   return matches.filter(m=>{
+    // type filter — old records without type field are treated as 'match'
+    const mtype = m.type || 'match';
+    if(mtype !== currentType) return false;
     if(fm && m.map!==fm) return false;
     if(fr && m.result!==fr) return false;
     if(cfAgents.length){
@@ -755,21 +822,29 @@ function renderList(){
   fm.value = prev;
 
   const filtered = getFiltered();
-  document.getElementById('hdr-count').textContent = matches.length+'試合';
+  const totalOfType = matches.filter(m=>(m.type||'match')===currentType).length;
+  document.getElementById('hdr-count').textContent = totalOfType+(currentType==='tourn'?'大会':'試合');
 
   // stats
-  const wins=filtered.filter(m=>m.result==='win').length;
-  const losses=filtered.filter(m=>m.result==='loss').length;
-  const wr=filtered.length?Math.round(wins/filtered.length*100):0;
-  document.getElementById('stats').innerHTML=`
-    <div class="scard"><div class="v">${filtered.length}</div><div class="l">試合数</div></div>
-    <div class="scard w"><div class="v">${wins}</div><div class="l">WIN</div></div>
-    <div class="scard lo"><div class="v">${losses}</div><div class="l">LOSS</div></div>
-    <div class="scard"><div class="v">${wr}%</div><div class="l">勝率</div></div>`;
+  if(currentType === 'tourn'){
+    document.getElementById('stats').innerHTML=`
+      <div class="scard"><div class="v">${filtered.length}</div><div class="l">大会数</div></div>
+      <div class="scard"><div class="v">${[...new Set(filtered.map(m=>m.map).filter(Boolean))].length}</div><div class="l">マップ種</div></div>`;
+  } else {
+    const wins=filtered.filter(m=>m.result==='win').length;
+    const losses=filtered.filter(m=>m.result==='loss').length;
+    const wr=filtered.length?Math.round(wins/filtered.length*100):0;
+    document.getElementById('stats').innerHTML=`
+      <div class="scard"><div class="v">${filtered.length}</div><div class="l">試合数</div></div>
+      <div class="scard w"><div class="v">${wins}</div><div class="l">WIN</div></div>
+      <div class="scard lo"><div class="v">${losses}</div><div class="l">LOSS</div></div>
+      <div class="scard"><div class="v">${wr}%</div><div class="l">勝率</div></div>`;
+  }
 
   const el = document.getElementById('mlist');
   if(!filtered.length){
-    el.innerHTML='<div class="empty"><div style="font-size:32px">📋</div><p>試合記録がありません</p></div>';
+    const emptyMsg = currentType==='tourn' ? '大会観戦の記録がありません' : '試合記録がありません';
+    el.innerHTML=`<div class="empty"><div style="font-size:32px">${currentType==='tourn'?'🏆':'📋'}</div><p>${emptyMsg}</p></div>`;
     return;
   }
 
@@ -803,26 +878,51 @@ function renderList(){
   el.innerHTML=html;
 }
 
-function cardHTML(m){
-  const mapInfo = MAP_DATA.find(x=>x.name===m.map);
-  const thumbHTML = mapInfo
-    ? `<img class="map-thumb" src="${mapInfo.listIcon}" alt="${m.map}" loading="lazy">`
-    : `<div class="map-nopic">${m.map||'—'}</div>`;
-
-  const myIcons = m.myComp.map(a=>{
+function agentIconsHTML(comp){
+  return (comp||[]).map(a=>{
     const ai=AGENT_DATA.find(x=>x.name===a);
     return ai
       ? `<span class="aicon-wrap"><img class="aicon" src="${ai.icon}" alt="${a}" title="${a}" loading="lazy"><span class="atip">${a}</span></span>`
       : `<span class="aicon-wrap"><div class="aicon" style="display:flex;align-items:center;justify-content:center;font-size:9px">${a.slice(0,3)}</div></span>`;
   }).join('');
-  const enIcons = m.enemyComp.map(a=>{
-    const ai=AGENT_DATA.find(x=>x.name===a);
-    return ai
-      ? `<span class="aicon-wrap"><img class="aicon" src="${ai.icon}" alt="${a}" loading="lazy"><span class="atip">${a}</span></span>`
-      : `<span class="aicon-wrap"><div class="aicon" style="display:flex;align-items:center;justify-content:center;font-size:9px">${a.slice(0,3)}</div></span>`;
-  }).join('');
+}
 
+function cardHTML(m){
+  const isTourn = m.type === 'tourn';
+  const mapInfo = MAP_DATA.find(x=>x.name===m.map);
+  const thumbHTML = mapInfo
+    ? `<img class="map-thumb" src="${mapInfo.listIcon}" alt="${m.map}" loading="lazy">`
+    : `<div class="map-nopic">${m.map||'—'}</div>`;
+
+  const myIcons = agentIconsHTML(m.myComp);
+  const enIcons = agentIconsHTML(m.enemyComp);
   const ytBadge = m.youtubeUrl ? '<span class="ytbadge" title="YouTube">▶</span>' : '';
+  const noteBadge = m.summaryNotes ? '<span class="ytbadge" title="まとめノートあり" style="background:#1a3a1a;color:#4ade80;border-color:#4ade80">📋</span>' : '';
+
+  if(isTourn){
+    return `
+      <div class="mcard" onclick="openMatch('${m.id}')" style="border-left:3px solid #f59e0b">
+        <div class="bar" style="background:#f59e0b"></div>
+        ${thumbHTML}
+        <div class="inner">
+          <div>
+            <div class="mname" style="color:#f59e0b">${m.tournName||'大会名未設定'}</div>
+            <div style="font-size:11px;color:var(--sub);margin-top:2px">${m.map||'—'}</div>
+            ${(m.teamA||m.teamB)?`<div style="font-size:10px;color:var(--sub);margin-top:2px">🔵${m.teamA||'?'}  vs  🔴${m.teamB||'?'}</div>`:''}
+          </div>
+          <div>
+            <div class="icon-row">${myIcons||'<span style="font-size:11px;color:var(--sub)">未選択</span>'}</div>
+            ${(myIcons&&enIcons)?'<div class="icon-row" style="margin-top:3px"><span class="vs-sep">vs</span>'+enIcons+'</div>':''}
+          </div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+            ${ytBadge}${noteBadge}
+            <span class="mdate">${m.date||''}</span>
+            <button class="del-btn" onclick="delMatch(event,'${m.id}')">✕</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
   return `
     <div class="mcard ${m.result||''}" onclick="openMatch('${m.id}')">
       <div class="bar"></div>
@@ -838,7 +938,7 @@ function cardHTML(m){
           ${(myIcons&&enIcons)?'<div class="icon-row" style="margin-top:3px"><span class="vs-sep">vs</span>'+enIcons+'</div>':''}
         </div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
-          ${ytBadge}
+          ${ytBadge}${noteBadge}
           <span class="mdate">${m.date||''}</span>
           <button class="del-btn" onclick="delMatch(event,'${m.id}')">✕</button>
         </div>
@@ -858,24 +958,46 @@ function delMatch(e,id){
 function showNew(){
   const id=Date.now().toString();
   const rounds=Array.from({length:24},(_,i)=>({number:i+1,side:i<12?'attack':'defense',result:'',note:''}));
-  const m={id,date:new Date().toISOString().slice(0,10),map:'',score:'',result:'',enemyTeam:'',youtubeUrl:'',myComp:[],enemyComp:[],memo:'',rounds};
+  const isTourn = currentType === 'tourn';
+  const m={
+    id, type: currentType,
+    date:new Date().toISOString().slice(0,10),
+    map:'', score:'', result:'', enemyTeam:'', youtubeUrl:'',
+    myComp:[], enemyComp:[], memo:'', summaryNotes:'', rounds,
+    // tournament fields
+    tournName:'', teamA:'', teamB:''
+  };
   matches.unshift(m);
   currentId=id;
-  upsertMatch(id); // 新規作成をすぐDB保存
+  upsertMatch(id);
   openMatch(id);
 }
 
 function openMatch(id){
   currentId=id;
   const m=gm(id);
+  const isTourn = m.type === 'tourn';
   document.getElementById('view-list').style.display='none';
+  document.getElementById('tab-bar').style.display='none';
   document.getElementById('view-detail').style.display='block';
+  // tournament vs match fields
+  document.getElementById('tourn-fields').classList.toggle('show', isTourn);
+  document.getElementById('d-tourn-name').value = m.tournName||'';
+  document.getElementById('d-team-a').value = m.teamA||'';
+  document.getElementById('d-team-b').value = m.teamB||'';
+  // score/result row: hide for tournament
+  document.getElementById('enemy-team-lbl').textContent = isTourn ? 'スコア備考' : '敵チーム名';
+  document.getElementById('d-enemy-team').placeholder = isTourn ? '例: 2-1, OT など...' : '例: Team SEN, 〇〇clan...';
+  // common fields
   document.getElementById('d-enemy-team').value=m.enemyTeam||'';
   document.getElementById('d-score').value=m.score||'';
   document.getElementById('d-result').value=m.result||'';
   document.getElementById('d-date').value=m.date||'';
   document.getElementById('d-yt').value=m.youtubeUrl||'';
   document.getElementById('d-memo').value=m.memo||'';
+  // まとめノート
+  const summTa = document.getElementById('d-summary');
+  summTa.value = m.summaryNotes||'';
   setMapBtn(m.map);
   buildAgentGrids(m);
   buildRounds(m);
@@ -887,6 +1009,7 @@ function goList(){
   currentId=null;
   document.getElementById('view-detail').style.display='none';
   document.getElementById('view-list').style.display='block';
+  document.getElementById('tab-bar').style.display='flex';
   renderList();
 }
 
@@ -894,7 +1017,11 @@ function sf(f,v){ if(currentId) gm(currentId)[f]=v; save(); }
 
 function updateTitle(){
   const m=gm(currentId);
-  document.getElementById('dtitle').textContent=[m.map||'NEW MATCH',m.score].filter(Boolean).join('  ');
+  if(m.type==='tourn'){
+    document.getElementById('dtitle').textContent=[m.tournName||'大会観戦',m.map].filter(Boolean).join(' — ');
+  } else {
+    document.getElementById('dtitle').textContent=[m.map||'NEW MATCH',m.score].filter(Boolean).join('  ');
+  }
 }
 function updateBadge(){
   const m=gm(currentId);
@@ -1188,8 +1315,73 @@ function renderPresetList(){
   }).join('');
 }
 
+// ── TAB SWITCHER ───────────────────────────────────────
+let currentType = 'match'; // 'match' | 'tourn'
+
+function switchTab(type){
+  currentType = type;
+  document.getElementById('tab-match').classList.toggle('on', type==='match');
+  document.getElementById('tab-tourn').classList.toggle('on', type==='tourn');
+  const addBtn = document.getElementById('add-btn');
+  if(type==='tourn'){
+    addBtn.textContent = '＋ 大会を追加';
+  } else {
+    addBtn.textContent = '＋ 試合を追加';
+  }
+  renderList();
+}
+
+// ── SUMMARY NOTES ──────────────────────────────────────
+function bulletEnter(e){
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  const ta = e.target;
+  const val = ta.value;
+  const pos = ta.selectionStart;
+  const insert = '\n• ';
+  ta.value = val.slice(0, pos) + insert + val.slice(pos);
+  ta.selectionStart = ta.selectionEnd = pos + insert.length;
+  sf('summaryNotes', ta.value);
+}
+
+function copyNotes(){
+  const m = gm(currentId);
+  if(!m) return;
+  const isTourn = m.type === 'tourn';
+  let lines = [];
+  if(isTourn){
+    lines.push(`🏆 ${m.tournName||'大会名未設定'}`);
+    lines.push(`📅 ${m.date||'—'}  ${m.map||'—'}`);
+    if(m.teamA || m.teamB)
+      lines.push(`🔵 ${m.teamA||'チームA'}  vs  🔴 ${m.teamB||'チームB'}`);
+  } else {
+    const res = m.result ? (m.result==='win'?'WIN':'LOSS') : '—';
+    lines.push(`■ ${m.map||'—'}  ${m.score||''}  ${res}  ${m.enemyTeam?'vs '+m.enemyTeam:''}`);
+    lines.push(`📅 ${m.date||'—'}`);
+  }
+  if(m.myComp && m.myComp.length)
+    lines.push(`🔵 自分：${m.myComp.join(' / ')}`);
+  if(m.enemyComp && m.enemyComp.length)
+    lines.push(`🔴 敵：${m.enemyComp.join(' / ')}`);
+  if(m.summaryNotes && m.summaryNotes.trim()){
+    lines.push('');
+    lines.push('📝 まとめ');
+    lines.push(m.summaryNotes.trim());
+  }
+  const text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(()=>{
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2000);
+  }).catch(()=>{ alert(text); });
+}
+
 // ── INIT ───────────────────────────────────────────────
 loadData();
 </script>
+
+<!-- TOAST -->
+<div class="toast" id="toast">📋 クリップボードにコピーしました</div>
+
 </body>
 </html>

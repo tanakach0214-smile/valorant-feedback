@@ -252,6 +252,34 @@ header h1{font-size:16px;font-weight:900;letter-spacing:3px;color:var(--red);}
 .summary-ta:focus{outline:none;border-color:var(--red);}
 .summary-hint{font-size:11px;color:var(--sub);margin-top:5px;}
 
+/* RANK AGENT FILTER */
+.rank-filter{display:none;padding:10px 20px 12px;background:var(--bg2);border-bottom:1px solid var(--border);}
+.rank-filter.show{display:block;}
+.rank-filter-label{font-size:11px;color:var(--sub);letter-spacing:2px;margin-bottom:8px;display:flex;align-items:center;gap:10px;}
+.rank-agent-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.rank-aicon{width:40px;height:40px;border-radius:6px;cursor:pointer;border:2px solid transparent;opacity:.55;transition:all .15s;position:relative;overflow:visible;}
+.rank-aicon img{width:100%;height:100%;object-fit:cover;border-radius:4px;display:block;}
+.rank-aicon:hover{opacity:.85;border-color:var(--sub);}
+.rank-aicon.on{opacity:1;border-color:var(--red);box-shadow:0 0 8px rgba(239,68,68,.5);}
+.rank-aicon .rtip{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;font-size:9px;white-space:nowrap;padding:2px 5px;border-radius:3px;display:none;z-index:10;}
+.rank-aicon:hover .rtip{display:block;}
+.rank-clear-btn{font-size:11px;color:var(--red);cursor:pointer;margin-left:8px;padding:3px 8px;border:1px solid var(--red);border-radius:4px;}
+
+/* RANK AGENT STATS */
+.rank-agent-stats{padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border);display:none;}
+.rank-agent-stats.show{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.ras-label{font-size:11px;color:var(--sub);letter-spacing:1px;margin-right:4px;}
+.ras-item{display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;transition:border-color .15s;}
+.ras-item:hover{border-color:var(--sub);}
+.ras-item.on{border-color:var(--red);}
+.ras-item img{width:22px;height:22px;border-radius:3px;object-fit:cover;}
+.ras-name{font-size:11px;color:var(--sub);}
+.ras-wr{font-size:12px;font-weight:700;}
+.ras-wr.good{color:var(--win);}
+.ras-wr.bad{color:var(--red);}
+.ras-wr.mid{color:#fbbf24;}
+.ras-count{font-size:10px;color:var(--sub);}
+
 /* TOAST */
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#14532d;color:var(--win);border:1px solid var(--win);border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;}
 .toast.show{opacity:1;}
@@ -316,6 +344,7 @@ header h1{font-size:16px;font-weight:900;letter-spacing:3px;color:var(--red);}
 <!-- TAB BAR -->
 <div class="tab-bar" id="tab-bar" style="display:none">
   <button class="tab-btn on" id="tab-match" onclick="switchTab('match')">マイマッチ</button>
+  <button class="tab-btn" id="tab-rank" onclick="switchTab('rank')" style="border-bottom-color:transparent">🎖 RANK</button>
   <button class="tab-btn tourn" id="tab-tourn" onclick="switchTab('tourn')">🏆 大会観戦</button>
 </div>
 
@@ -391,6 +420,20 @@ CREATE POLICY "public_access" ON vfb_matches
       <span class="cf-clear" id="cf-clear" onclick="clearCF()" style="display:none">クリア</span>
     </div>
   </div>
+
+  <!-- RANK AGENT FILTER (RANKタブのみ表示) -->
+  <div class="rank-filter" id="rank-filter">
+    <div class="rank-filter-label">
+      🎖 エージェント絞り込み（1体選択）
+      <span class="rank-clear-btn" id="rank-clear" onclick="clearRankAgent()" style="display:none">クリア</span>
+    </div>
+    <div class="rank-agent-row" id="rank-agent-row">
+      <span style="font-size:12px;color:var(--sub)">読み込み中...</span>
+    </div>
+  </div>
+
+  <!-- RANK AGENT STATS -->
+  <div class="rank-agent-stats" id="rank-agent-stats"></div>
 
   <!-- CF PICKER POPUP -->
   <div id="cf-picker" style="display:none">
@@ -805,7 +848,12 @@ function getFiltered(){
     if(mtype !== currentType) return false;
     if(fm && m.map!==fm) return false;
     if(fr && m.result!==fr) return false;
-    if(cfAgents.length){
+    // rank tab: single agent filter
+    if(currentType==='rank' && rankAgent){
+      if(!(m.myComp||[]).includes(rankAgent)) return false;
+    }
+    // match/tourn tab: comp filter
+    if(currentType!=='rank' && cfAgents.length){
       const comp = cfSide==='my' ? m.myComp : m.enemyComp;
       if(!cfAgents.every(a=>comp.includes(a))) return false;
     }
@@ -814,6 +862,8 @@ function getFiltered(){
 }
 
 function renderList(){
+  // rebuild rank agent filter if on rank tab
+  if(currentType==='rank') buildRankAgentFilter();
   // map filter options
   const fm = document.getElementById('f-map');
   const prev = fm.value;
@@ -823,28 +873,39 @@ function renderList(){
 
   const filtered = getFiltered();
   const totalOfType = matches.filter(m=>(m.type||'match')===currentType).length;
-  document.getElementById('hdr-count').textContent = totalOfType+(currentType==='tourn'?'大会':'試合');
+  const typeLabel = currentType==='tourn'?'大会':currentType==='rank'?'RANK':'試合';
+  document.getElementById('hdr-count').textContent = totalOfType+typeLabel;
 
   // stats
   if(currentType === 'tourn'){
     document.getElementById('stats').innerHTML=`
       <div class="scard"><div class="v">${filtered.length}</div><div class="l">大会数</div></div>
       <div class="scard"><div class="v">${[...new Set(filtered.map(m=>m.map).filter(Boolean))].length}</div><div class="l">マップ種</div></div>`;
+    document.getElementById('rank-agent-stats').classList.remove('show');
   } else {
     const wins=filtered.filter(m=>m.result==='win').length;
     const losses=filtered.filter(m=>m.result==='loss').length;
     const wr=filtered.length?Math.round(wins/filtered.length*100):0;
+    const label = currentType==='rank' ? 'RANK試合' : '試合数';
     document.getElementById('stats').innerHTML=`
-      <div class="scard"><div class="v">${filtered.length}</div><div class="l">試合数</div></div>
+      <div class="scard"><div class="v">${filtered.length}</div><div class="l">${label}</div></div>
       <div class="scard w"><div class="v">${wins}</div><div class="l">WIN</div></div>
       <div class="scard lo"><div class="v">${losses}</div><div class="l">LOSS</div></div>
       <div class="scard"><div class="v">${wr}%</div><div class="l">勝率</div></div>`;
+    // rank agent stats (all rank matches, not filtered)
+    if(currentType==='rank'){
+      const allRank = matches.filter(m=>(m.type||'match')==='rank');
+      renderRankAgentStats(allRank);
+    } else {
+      document.getElementById('rank-agent-stats').classList.remove('show');
+    }
   }
 
   const el = document.getElementById('mlist');
   if(!filtered.length){
-    const emptyMsg = currentType==='tourn' ? '大会観戦の記録がありません' : '試合記録がありません';
-    el.innerHTML=`<div class="empty"><div style="font-size:32px">${currentType==='tourn'?'🏆':'📋'}</div><p>${emptyMsg}</p></div>`;
+    const emptyMsg = currentType==='tourn' ? '大会観戦の記録がありません' : currentType==='rank' ? 'RANK試合の記録がありません' : '試合記録がありません';
+    const emptyIcon = currentType==='tourn'?'🏆':currentType==='rank'?'🎖':'📋';
+    el.innerHTML=`<div class="empty"><div style="font-size:32px">${emptyIcon}</div><p>${emptyMsg}</p></div>`;
     return;
   }
 
@@ -1316,19 +1377,91 @@ function renderPresetList(){
 }
 
 // ── TAB SWITCHER ───────────────────────────────────────
-let currentType = 'match'; // 'match' | 'tourn'
+let currentType = 'match'; // 'match' | 'rank' | 'tourn'
+let rankAgent = null; // selected agent for rank filter
 
 function switchTab(type){
   currentType = type;
   document.getElementById('tab-match').classList.toggle('on', type==='match');
+  document.getElementById('tab-rank').classList.toggle('on', type==='rank');
   document.getElementById('tab-tourn').classList.toggle('on', type==='tourn');
+  // rank tab colors
+  document.getElementById('tab-rank').style.borderBottomColor = type==='rank' ? '#fbbf24' : 'transparent';
+  document.getElementById('tab-rank').style.color = type==='rank' ? '#fbbf24' : '';
   const addBtn = document.getElementById('add-btn');
-  if(type==='tourn'){
-    addBtn.textContent = '＋ 大会を追加';
-  } else {
-    addBtn.textContent = '＋ 試合を追加';
-  }
+  if(type==='tourn') addBtn.textContent = '＋ 大会を追加';
+  else if(type==='rank') addBtn.textContent = '＋ RANK試合を追加';
+  else addBtn.textContent = '＋ 試合を追加';
+  // show/hide rank filter
+  const rankFilter = document.getElementById('rank-filter');
+  rankFilter.classList.toggle('show', type==='rank');
+  if(type==='rank') buildRankAgentFilter();
+  // show/hide comp filter (hide on rank tab — replaced by rank filter)
+  document.querySelector('.cf-row').style.display = type==='rank' ? 'none' : '';
   renderList();
+}
+
+// ── RANK AGENT FILTER ──────────────────────────────────
+function buildRankAgentFilter(){
+  const row = document.getElementById('rank-agent-row');
+  if(!AGENT_DATA.length){ return; }
+  // only show agents that appear in rank matches
+  const rankMatches = matches.filter(m=>(m.type||'match')==='rank');
+  const usedAgents = new Set();
+  rankMatches.forEach(m=>(m.myComp||[]).forEach(a=>usedAgents.add(a)));
+  const agents = AGENT_DATA.filter(a=>usedAgents.has(a.name));
+  if(!agents.length){
+    row.innerHTML='<span style="font-size:12px;color:var(--sub)">まだRANK試合がありません</span>';
+    return;
+  }
+  row.innerHTML = agents.map(a=>`
+    <div class="rank-aicon ${rankAgent===a.name?'on':''}" onclick="toggleRankAgent('${a.name}')" title="${a.name}">
+      <img src="${a.icon}" alt="${a.name}" loading="lazy">
+      <span class="rtip">${a.name}</span>
+    </div>`).join('');
+}
+
+function toggleRankAgent(name){
+  rankAgent = rankAgent === name ? null : name;
+  document.getElementById('rank-clear').style.display = rankAgent ? 'inline' : 'none';
+  buildRankAgentFilter();
+  renderList();
+}
+
+function clearRankAgent(){
+  rankAgent = null;
+  document.getElementById('rank-clear').style.display = 'none';
+  buildRankAgentFilter();
+  renderList();
+}
+
+function renderRankAgentStats(rankMatches){
+  const el = document.getElementById('rank-agent-stats');
+  if(currentType !== 'rank'){ el.classList.remove('show'); return; }
+  // count wins/total per agent
+  const agentMap = {};
+  rankMatches.forEach(m=>{
+    (m.myComp||[]).forEach(a=>{
+      if(!agentMap[a]) agentMap[a]={wins:0,total:0};
+      agentMap[a].total++;
+      if(m.result==='win') agentMap[a].wins++;
+    });
+  });
+  const sorted = Object.entries(agentMap).sort((a,b)=>b[1].total-a[1].total);
+  if(!sorted.length){ el.classList.remove('show'); return; }
+  el.classList.add('show');
+  el.innerHTML = '<span class="ras-label">エージェント別勝率</span>' + sorted.map(([name,s])=>{
+    const wr = s.total ? Math.round(s.wins/s.total*100) : 0;
+    const wrClass = wr>=60?'good':wr>=45?'mid':'bad';
+    const ai = AGENT_DATA.find(x=>x.name===name);
+    const isOn = rankAgent===name;
+    return `<div class="ras-item ${isOn?'on':''}" onclick="toggleRankAgent('${name}')">
+      ${ai?`<img src="${ai.icon}" alt="${name}" loading="lazy">`:''}
+      <span class="ras-name">${name}</span>
+      <span class="ras-wr ${wrClass}">${wr}%</span>
+      <span class="ras-count">${s.wins}W${s.total-s.wins}L</span>
+    </div>`;
+  }).join('');
 }
 
 // ── SUMMARY NOTES ──────────────────────────────────────
